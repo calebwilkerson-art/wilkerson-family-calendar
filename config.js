@@ -8,7 +8,7 @@
  *       in this repository's Actions secrets and never reaches the browser.
  */
 window.FAMILY_CAL = {
-  db: "",
+  db: "https://wilkerson-family-calendar-default-rtdb.firebaseio.com",
   cal: "wilkerson-main",
   vapidPublic: "BJqQyofB2mpfatjm49Usjxmhz50Dz8yDBqV6SJZEHVMWaLap5y9eWoyoYmUd0207Pu_u3UpZpi8AfguHevQNRmE"
 };
