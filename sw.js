@@ -2,7 +2,7 @@
  * and receives push reminders when the app is closed.
  * Calendar data never goes through here; it streams straight from the database. */
 var CACHE = 'wilkerson-cal-v3';
-var SHELL = ['./', 'index.html', 'app.js', 'config.js', 'manifest.webmanifest', 'hero.jpg', 'icons/icon-192.png', 'icons/icon-512.png'];
+var SHELL = ['./', 'index.html', 'app.js', 'config.js', 'manifest.webmanifest', 'hero.webp', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', function(e){
   e.waitUntil(caches.open(CACHE).then(function(c){ return c.addAll(SHELL); }).then(function(){ return self.skipWaiting(); }));

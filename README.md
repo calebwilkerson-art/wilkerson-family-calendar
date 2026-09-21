@@ -1,22 +1,29 @@
 # Wilkerson Calendar
 
-A shared family schedule that runs as a plain web page. No login, no app store. Anyone with the link can add or change things and everyone sees it right away.
+The family schedule as a plain web page. No login, no app store, no accounts. Anyone with the link can add or change things and everyone else sees it straight away.
 
-**Live site:** the GitHub Pages URL for this repository (Settings › Pages).
+**Live:** https://calebwilkerson-art.github.io/wilkerson-family-calendar/
 
-## How it works
+## What's in here
 
-- `index.html`, `app.js` – the whole app. One page, no build step, no framework.
-- `config.js` – where the shared database lives (see below).
-- `sw.js`, `manifest.webmanifest`, `icons/` – lets it install to an iPhone or Android Home Screen and keep working offline.
+| File | What it does |
+| --- | --- |
+| `index.html`, `app.js` | The whole app. One page, no build step, no framework. |
+| `config.js` | Where the shared database lives, and the public push key. |
+| `hero.webp` | The family photo at the top. Ships with the site, so it is there for everyone the moment they open the link. |
+| `sw.js`, `manifest.webmanifest`, `icons/` | Home Screen install, offline support, and push delivery. |
+| `push/send.js` | Sends reminders on a schedule, outside the browser. |
+| `tools/make_icons.py` | Rebuilds the app icons. |
 
-Data is stored in a free [Firebase Realtime Database](https://firebase.google.com/products/realtime-database), reached over its REST and streaming API. There is no server code to run. Until a database is connected the app runs in local mode and only saves on the device it is opened on.
+Events live in a free [Firebase Realtime Database](https://firebase.google.com/products/realtime-database), reached over its REST and streaming API. There is no server to run. Every change is written with the moment it was made, so a change made on a phone that was offline is only ever dropped if someone else has since changed that same event; nothing else is lost.
 
-## Go live (one-time, about five minutes)
+## Going live
+
+Until `config.js` has a database URL the calendar still works, but it saves only on the device it is opened on.
 
 1. Go to [console.firebase.google.com](https://console.firebase.google.com) and **Add project** (any name, Analytics off).
-2. Left menu: **Build › Realtime Database › Create database**. Choose the US region and **Start in locked mode**.
-3. On the **Rules** tab, replace everything with:
+2. **Build › Realtime Database › Create database**. US region, **Start in locked mode**.
+3. On the **Rules** tab, replace everything with this and Publish:
    ```json
    {
      "rules": {
@@ -27,21 +34,28 @@ Data is stored in a free [Firebase Realtime Database](https://firebase.google.co
      }
    }
    ```
-   and click **Publish**. (The root stays locked; only calendars whose name you know are readable, and the name in the share link is a random 22-character string.)
-4. On the **Data** tab, copy the database URL at the top (ends in `firebaseio.com` or `firebasedatabase.app`).
-5. Either open the live site, tap the gear, paste the URL under **Sharing** and tap **Connect and go live** (the share link then carries the settings), **or** put the URL and a calendar name into `config.js` so the plain site URL is the share link:
+   The root stays locked. Only a calendar whose exact name you know can be read.
+4. On the **Data** tab copy the database URL (ends in `firebaseio.com` or `firebasedatabase.app`) and put it in `config.js`:
    ```js
-   window.FAMILY_CAL = { db: "https://your-project-default-rtdb.firebaseio.com", cal: "cal-xxxxxxxxxxxxxxxxxx" };
+   window.FAMILY_CAL = { db: "https://your-project-default-rtdb.firebaseio.com", cal: "wilkerson-main", vapidPublic: "…" };
    ```
 
-Whatever is on the first device that connects (including anything already added) becomes the shared starting point.
+Whatever is on the first device to connect becomes the shared starting point. Settings › Sharing inside the app can also do this without editing the file, in which case the settings ride along in the share link instead.
 
-## iPhone
+## Reminders
 
-- **Home Screen:** open the link in Safari, tap Share, then **Add to Home Screen**. It opens full screen with its own icon.
-- **Reminders:** Settings › Reminders pings 30 minutes before anything starts while the app is open (on iPhone it must be installed to the Home Screen first).
-- **Alerts when the app is closed:** Settings › **Add everything to iPhone Calendar** downloads the schedule with 30-minute alerts into the built-in Calendar. Any single event can be added the same way from its edit screen.
+Three layers, strongest last.
+
+- **While the app is open**: a check every minute, 30 minutes ahead.
+- **iCal**: Settings › *Add everything to iCal* drops the schedule into the iPhone or Mac Calendar with 30-minute alerts. Works forever, with nothing running.
+- **Push**: `push/send.js` runs every ten minutes in GitHub Actions. It reads the calendar, works out what is about to start, and pushes to every device that has turned reminders on, whether or not anyone has the app open. It also sends a rundown of the day at 7am. Dead devices are dropped automatically.
+
+Push needs two things in place: a database (above), and the `VAPID_PRIVATE` repository secret, which is already set. Its public half sits in `config.js`; the private half never reaches a browser.
+
+On iPhone, web push only works once the app is on the Home Screen: open the link in Safari, Share, **Add to Home Screen**, then turn Reminders on in Settings.
+
+GitHub switches scheduled workflows off after 60 days of repository inactivity, so `keepalive.yml` makes one commit a month to keep the reminders running.
 
 ## Directions
 
-Give an event a place or an address and a **GO** button appears on it. It offers Apple Maps or Google Maps driving directions.
+Give an event a place or an address and a **GO** button appears on it, offering Apple Maps or Google Maps driving directions.
