@@ -200,7 +200,7 @@
     return {people:basePeople(), events:ev, removed:{}, photo:'', meta:{name:'Wilkerson Calendar', createdAt:Date.now()}};
   }
 
-  /* ── config ──────────────────────────────────────────── */
+  /* ── config ─────────────────────────────────────────── */
   function loadJSON(key){ try{ var r = localStorage.getItem(key); return r ? JSON.parse(r) : null; }catch(e){ return null; } }
   function saveJSON(key, v){ try{ localStorage.setItem(key, JSON.stringify(v)); }catch(e){} }
   function cleanDb(u){
@@ -248,6 +248,8 @@
   }
   function normalize(t){
     t = t && typeof t === 'object' ? t : {};
+    // clear out any stray path-shaped keys left by an older build
+    Object.keys(t).forEach(function(k){ if(k.indexOf('/') !== -1) delete t[k]; });
     t.people = t.people && typeof t.people === 'object' ? t.people : {};
     t.events = t.events && typeof t.events === 'object' ? t.events : {};
     t.removed = t.removed && typeof t.removed === 'object' ? t.removed : {};
@@ -335,22 +337,24 @@
     syncState = kind;
     var pill = $('syncPill'); pill.className = 'sync ' + kind; $('syncText').textContent = text;
   }
-  function applyRemote(path, data, isPatch){
-    var parts = path.split('/').filter(Boolean);
-    if(parts.length === 0){
-      if(isPatch){ Object.keys(data || {}).forEach(function(k){ tree[k] = data[k]; }); }
-      else tree = normalize(data || {});
-      if(!data) tree = normalize(null);
-    } else {
-      var node = tree;
-      for(var i=0;i<parts.length-1;i++){ if(!node[parts[i]] || typeof node[parts[i]] !== 'object') node[parts[i]] = {}; node = node[parts[i]]; }
-      var last = parts[parts.length-1];
-      if(isPatch){
-        if(!node[last] || typeof node[last] !== 'object') node[last] = {};
-        Object.keys(data || {}).forEach(function(k){ if(data[k] === null) delete node[last][k]; else node[last][k] = data[k]; });
-      } else if(data === null || data === undefined){ delete node[last]; }
-      else node[last] = data;
+  function setAt(path, value){
+    var parts = String(path).split('/').filter(Boolean);
+    if(!parts.length){ tree = normalize(value == null ? null : value); return; }
+    var node = tree;
+    for(var i=0;i<parts.length-1;i++){
+      if(!node[parts[i]] || typeof node[parts[i]] !== 'object') node[parts[i]] = {};
+      node = node[parts[i]];
     }
+    var last = parts[parts.length-1];
+    if(value === null || value === undefined) delete node[last]; else node[last] = value;
+  }
+  /* A patch from the database names each changed spot by its own path, and that
+     path can reach several levels down (events/<id>). Every key is resolved as a
+     path, otherwise a change arrives as a stray top-level key and the edit looks
+     like it never happened. */
+  function applyRemote(path, data, isPatch){
+    if(isPatch) Object.keys(data || {}).forEach(function(k){ setAt(path + '/' + k, data[k]); });
+    else setAt(path, data);
     tree = normalize(tree);
   }
   function connect(){
@@ -776,7 +780,7 @@
   });
   document.addEventListener('keydown', function(e){ if(e.key === 'Escape'){ closeForm(); closeDay(); dirOverlay.classList.remove('open'); $('settingsOverlay').classList.remove('open'); } });
 
-  /* ── chrome ──────────────────────────────────────────── */
+  /* ── chrome ───────────────────────────────────────────── */
   $('viewSeg').addEventListener('click', function(e){
     var b = e.target.closest('button[data-view]'); if(!b) return;
     view = b.getAttribute('data-view');
@@ -1038,7 +1042,7 @@
     }, {passive:true});
   }
 
-  /* ── go ──────────────────────────────────────────────── */
+  /* ── go ─────────────────────────────────────────────── */
   render();
   if(live) connect(); else setSync('local', 'THIS DEVICE ONLY');
   if(prefs.reminders && 'Notification' in window && Notification.permission === 'granted'){
