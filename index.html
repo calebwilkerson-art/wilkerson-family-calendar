@@ -43,13 +43,16 @@
 
   /* Hero */
   .hero{position:relative; height:calc(252px + var(--safe-top)); overflow:hidden; background:var(--gw-ink-deep); transition:height .2s ease;}
-  .hero.photo{height:calc(330px + var(--safe-top));}
+  .hero.photo{height:calc(360px + var(--safe-top));}
   .hero-media{position:absolute; inset:-14% 0; will-change:transform;
     background:linear-gradient(150deg,#31414a 0%,#2b3439 45%,#22262b 100%); background-size:cover; background-position:center;}
+  .hero.photo .hero-media{inset:-10% 0; background-position:center top;}
   .hero-media.has-photo{background-image:var(--hero-photo);}
   .hero-veil{position:absolute; inset:0; pointer-events:none;
     background:linear-gradient(180deg,rgba(28,31,35,.62) 0%,rgba(28,31,35,.15) 40%,rgba(28,31,35,.94) 100%);}
+  .hero.photo .hero-veil{background:linear-gradient(180deg,rgba(28,31,35,.38) 0%,rgba(28,31,35,0) 26%,rgba(28,31,35,0) 46%,rgba(28,31,35,.55) 68%,rgba(28,31,35,.92) 100%);}
   .hero-copy{position:absolute; left:22px; right:22px; bottom:74px; will-change:transform,opacity;}
+  .hero.photo .hero-copy{bottom:70px;}
   .next-pill{display:inline-flex; align-items:center; gap:8px; padding:6px 11px; border-radius:999px;
     background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.25); margin-bottom:12px; max-width:100%;}
   .next-pill .dot{flex:none; width:6px; height:6px; border-radius:50%; background:var(--gw-gold); animation:gwPulse 2.6s ease-in-out infinite;}
@@ -375,7 +378,7 @@
     </div>
     <div class="btn-row" id="editExtras" hidden>
       <button class="btn ghost" id="btnFormDirections">Directions</button>
-      <button class="btn ghost" id="btnFormIcs">Add to iPhone Calendar</button>
+      <button class="btn ghost" id="btnFormIcs">Add to iCal</button>
     </div>
   </div>
 </div>
@@ -454,11 +457,11 @@
       <h4>iPhone</h4>
       <div class="kv"><div class="k">Add to Home Screen<small id="installHint">In Safari tap Share, then "Add to Home Screen". It opens full screen like an app.</small></div></div>
       <div class="kv">
-        <div class="k">Reminders<small>Pings you 30 minutes before anything starts, while the app is open. On iPhone, install it to the Home Screen first.</small></div>
+        <div class="k">Reminders<small id="remHint">A reminder arrives 30 minutes before anything starts, and a rundown of the day each morning, even when the app is closed.</small></div>
         <button class="switch" id="swReminders" role="switch" aria-checked="false" aria-label="Reminders"></button>
       </div>
-      <div class="kv"><div class="k">iPhone Calendar<small>Puts the whole schedule in the built-in Calendar with alerts, so reminders work even when this app is closed.</small></div></div>
-      <button class="btn ghost" id="btnIcsAll" style="width:100%">ADD EVERYTHING TO IPHONE CALENDAR</button>
+      <div class="kv"><div class="k">iCal<small>Puts the whole schedule into your iPhone or Mac Calendar with alerts, so reminders work even when this app is closed.</small></div></div>
+      <button class="btn ghost" id="btnIcsAll" style="width:100%">ADD EVERYTHING TO ICAL</button>
     </div>
 
     <div class="sect">
