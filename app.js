@@ -215,8 +215,11 @@
     var q = new URLSearchParams(location.search);
     var stored = loadJSON(CFG_KEY) || {};
     var def = window.FAMILY_CAL || {};
-    var db = cleanDb(q.get('db') || stored.db || def.db);
-    var cal = (q.get('cal') || stored.cal || def.cal || '').replace(/[^\w-]/g, '');
+    // The site's own config wins over whatever this device connected to before,
+    // so everyone on the plain link lands on the same calendar. A link carrying
+    // ?db=&cal= still overrides both.
+    var db = cleanDb(q.get('db') || def.db || stored.db);
+    var cal = (q.get('cal') || def.cal || stored.cal || '').replace(/[^\w-]/g, '');
     var out = {db: db, cal: db ? (cal || randomCal()) : cal};
     if(db) saveJSON(CFG_KEY, out);
     return out;
