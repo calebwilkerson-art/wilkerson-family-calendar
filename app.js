@@ -14,6 +14,10 @@
   var OLD_PHOTO_KEY = 'wilkersonCalendarPhotoV1';
   var PREF_KEY = 'wilkersonCalPrefsV1';
 
+  /* The family photo ships with the site, so it is there the moment anyone opens
+     the link. Uploading a new one from Settings replaces it for everyone. */
+  var DEFAULT_PHOTO = 'hero.webp';
+
   var PALETTE = ['#fdb715','#a1d184','#3f7e96','#85aec5','#4e5257','#589db5','#7fb862','#2b5d70','#e0a006','#63656a'];
   var LEGACY_MAP = {
     '#2f5d8a':'#fdb715','#1e3f66':'#fdb715','#2f7d68':'#a1d184','#146149':'#a1d184',
@@ -278,12 +282,22 @@
     });
   }
   var pending = loadJSON(pendingKey) || [];
+  /* Every event write carries the moment it was made. A change queued on a phone
+     that was offline is dropped later only if someone else changed that same
+     event more recently. Everything else still goes through. */
+  function stamp(patch){
+    Object.keys(patch).forEach(function(k){
+      if(/^events\/[^/]+$/.test(k) && patch[k] && typeof patch[k] === 'object') patch[k].updatedAt = Date.now();
+    });
+    return patch;
+  }
   function write(patch){
+    stamp(patch);
     applyPatchLocal(patch);
     derive(); cache(); render();
     if(!live) return Promise.resolve();
     return sendPatch(patch).catch(function(){
-      pending.push(patch); saveJSON(pendingKey, pending);
+      pending.push({patch:patch, at:Date.now()}); saveJSON(pendingKey, pending);
       setSync('off', 'OFFLINE'); toast('Saved here. It will sync when you are back online.');
     });
   }
@@ -292,9 +306,24 @@
       .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); });
   }
   function flushPending(){
-    if(!pending.length) return Promise.resolve();
-    var next = pending[0];
-    return sendPatch(next).then(function(){ pending.shift(); saveJSON(pendingKey, pending); return flushPending(); });
+    if(!pending.length || !live) return Promise.resolve();
+    var job = pending[0];
+    var patch = job && job.patch ? job.patch : job;
+    return resolveStale(patch).then(function(fresh){
+      if(!Object.keys(fresh).length){ pending.shift(); saveJSON(pendingKey, pending); return flushPending(); }
+      return sendPatch(fresh).then(function(){ pending.shift(); saveJSON(pendingKey, pending); return flushPending(); });
+    });
+  }
+  /* Drop only the parts of a queued change that someone else has since superseded. */
+  function resolveStale(patch){
+    var paths = Object.keys(patch).filter(function(k){ return /^events\/[^/]+$/.test(k) && patch[k] && patch[k].updatedAt; });
+    if(!paths.length) return Promise.resolve(patch);
+    return Promise.all(paths.map(function(k){
+      return fetch(cfg.db + '/' + cfg.cal + '/' + k + '/updatedAt.json')
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(remote){ if(typeof remote === 'number' && remote > patch[k].updatedAt) delete patch[k]; })
+        .catch(function(){});
+    })).then(function(){ return patch; });
   }
 
   /* ── live connection (Firebase REST streaming) ───────── */
@@ -418,8 +447,9 @@
   }
   function renderHero(){
     var media = $('heroMedia'), hero = media.parentNode;
-    if(tree.photo){
-      media.style.setProperty('--hero-photo', 'url(' + tree.photo + ')');
+    var shot = tree.photo || DEFAULT_PHOTO;
+    if(shot){
+      media.style.setProperty('--hero-photo', 'url("' + shot + '")');
       media.classList.add('has-photo'); hero.classList.add('photo'); $('btnPhoto').textContent = 'CHANGE';
     } else {
       media.classList.remove('has-photo'); hero.classList.remove('photo'); $('btnPhoto').textContent = 'PHOTO';
@@ -529,12 +559,12 @@
           var pa = person(A.personId), pb = person(B.personId);
           if(pa.id === pb.id){
             if(overlaps || gap < 60){
-              out.push({key:key, when:when, level:'high', msg: pa.name + ' is double-booked \u2014 ' + first.title + ' at ' + timeLabel(first) + ' and ' + second.title + ' at ' + timeLabel(second) + '.'});
+              out.push({key:key, when:when, level:'high', msg: pa.name + ' is double-booked: ' + first.title + ' at ' + timeLabel(first) + ' and ' + second.title + ' at ' + timeLabel(second) + '.'});
             } else if(gap <= 150 && !(fe != null && ss - fe > 45)){
               out.push({key:key, when:when, level:'med', msg: 'Tight for ' + pa.name + ': ' + first.title + ' at ' + timeLabel(first) + ', then ' + second.title + ' at ' + timeLabel(second) + '. Plan the hand-off.'});
             }
           } else if(gap < 45){
-            out.push({key:key, when:when, level:'med', msg: 'Two places at once \u2014 ' + pa.name + ' at ' + A.title + ' (' + timeLabel(A) + ') and ' + pb.name + ' at ' + B.title + ' (' + timeLabel(B) + '). Who drives?'});
+            out.push({key:key, when:when, level:'med', msg: 'Two places at once: ' + pa.name + ' at ' + A.title + ' (' + timeLabel(A) + ') and ' + pb.name + ' at ' + B.title + ' (' + timeLabel(B) + '). Who drives?'});
           }
         }
       }
@@ -589,7 +619,7 @@
       var head = i === 0 ? (key === todayIso() ? 'TODAY' : DOWS[d.getDay()].toUpperCase()) : key === addDays(todayIso(),1) ? 'TOMORROW' : DOWS[d.getDay()].toUpperCase();
       var sub = MONTHS[d.getMonth()].slice(0,3) + ' ' + d.getDate();
       html += '<div class="group"><div class="group-head"><span class="lbl">' + head + '</span><span class="sub">' + sub + '</span></div><div class="cards">';
-      if(evs.length === 0) html += '<div class="day-empty">' + (filter ? esc(person(filter).name) + ' has nothing on this day.' : 'Nothing scheduled \u2014 a rare one.') + '</div>';
+      if(evs.length === 0) html += '<div class="day-empty">' + (filter ? esc(person(filter).name) + ' has nothing on this day.' : 'Nothing scheduled. A rare one.') + '</div>';
       else { evs.forEach(function(e){ html += cardHtml(e); }); shown += evs.length; }
       html += '</div></div>';
     }
@@ -655,7 +685,7 @@
   function openDirections(ev){
     dirDest = destinationOf(ev); if(!dirDest) return;
     $('dirTitle').textContent = ev.place || ev.title;
-    $('dirAddr').textContent = ev.address ? ev.address : dirDest + ' (no street address yet \u2014 edit the event to add one)';
+    $('dirAddr').textContent = ev.address ? ev.address : dirDest + ' (no street address yet, edit the event to add one)';
     var q = encodeURIComponent(dirDest);
     $('dirApple').href = 'https://maps.apple.com/?daddr=' + q + '&dirflg=d';
     $('dirGoogle').href = 'https://www.google.com/maps/dir/?api=1&destination=' + q + '&travelmode=driving';
@@ -802,7 +832,11 @@
     $('shareConnected').hidden = !live; $('shareSetup').hidden = live; $('btnDisconnect').hidden = !live;
     $('shareUrl').value = shareUrl();
     $('settingsSub').textContent = live ? 'Live \u00b7 ' + cfg.db.replace(/^https?:\/\//,'') : 'Saving on this device only.';
-    $('swReminders').setAttribute('aria-checked', prefs.reminders && Notification && Notification.permission === 'granted' ? 'true' : 'false');
+    var canNotify = ('Notification' in window) && Notification.permission === 'granted';
+    $('swReminders').setAttribute('aria-checked', prefs.reminders && canNotify ? 'true' : 'false');
+    $('remHint').textContent = !live ? 'Connect the calendar first, then reminders can be sent to every phone.'
+      : (isIOS && !standalone) ? 'On iPhone, add this to your Home Screen first, then come back and turn this on.'
+      : 'A reminder arrives 30 minutes before anything starts, and a rundown of the day each morning, even when the app is closed.';
     if(standalone) $('installHint').textContent = 'Installed. You are running it from the Home Screen.';
     else if(!isIOS) $('installHint').textContent = 'On iPhone: open this link in Safari, tap Share, then "Add to Home Screen". On Android: use "Install app" in the browser menu.';
     settingsOverlay.classList.add('open');
@@ -868,7 +902,7 @@
     toast('Original schedule restored');
   });
 
-  /* ── iPhone Calendar (.ics with alerts) ──────────────── */
+  /* ── iCal export (.ics with alerts) ──────────────────── */
   function icsDate(dateIso, mins){ var d = dateIso.replace(/-/g,''); return mins == null ? d : d + 'T' + pad(Math.floor(mins/60)) + pad(mins%60) + '00'; }
   function icsText(s){ return String(s || '').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n'); }
   function buildIcs(evs){
@@ -919,20 +953,69 @@
     });
   }
   setInterval(checkReminders, 60000);
+
+  /* ── push: reminders that arrive with the app closed ──────────── */
+  var VAPID = (window.FAMILY_CAL && window.FAMILY_CAL.vapidPublic) || '';
+  function urlB64(b64){
+    var pad = '===='.slice(0, (4 - b64.length % 4) % 4);
+    var raw = atob((b64 + pad).replace(/-/g,'+').replace(/_/g,'/'));
+    var out = new Uint8Array(raw.length);
+    for(var i=0;i<raw.length;i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  function hashStr(str){
+    var h = 5381;
+    for(var i=0;i<str.length;i++) h = ((h<<5) + h + str.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+  }
+  function pushable(){ return live && VAPID && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
+  function enablePush(){
+    if(!pushable()) return Promise.resolve(false);
+    return navigator.serviceWorker.ready.then(function(reg){
+      return reg.pushManager.getSubscription().then(function(existing){
+        return existing || reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:urlB64(VAPID)});
+      });
+    }).then(function(sub){
+      var j = sub.toJSON(), id = hashStr(j.endpoint), patch = {};
+      prefs.subId = id; saveJSON(PREF_KEY, prefs);
+      patch['subs/' + id] = {endpoint:j.endpoint, p256dh:j.keys.p256dh, auth:j.keys.auth,
+                             at:Date.now(), label:(navigator.platform || 'device')};
+      return sendPatch(patch).then(function(){ return true; });
+    }).catch(function(){ return false; });
+  }
+  function disablePush(){
+    var id = prefs.subId;
+    if(!('serviceWorker' in navigator)) return Promise.resolve();
+    return navigator.serviceWorker.ready.then(function(reg){ return reg.pushManager.getSubscription(); })
+      .then(function(sub){ return sub ? sub.unsubscribe() : null; })
+      .then(function(){ if(id && live){ var p = {}; p['subs/' + id] = null; return sendPatch(p); } })
+      .catch(function(){});
+  }
+
   $('swReminders').addEventListener('click', function(){
     var sw = this;
-    if(sw.getAttribute('aria-checked') === 'true'){ prefs.reminders = false; saveJSON(PREF_KEY, prefs); sw.setAttribute('aria-checked','false'); toast('Reminders off'); return; }
-    if(!('Notification' in window)){ toast(isIOS && !standalone ? 'Add the app to your Home Screen first, then turn this on.' : 'Notifications are not supported here.', 3600); return; }
+    if(sw.getAttribute('aria-checked') === 'true'){
+      prefs.reminders = false; saveJSON(PREF_KEY, prefs); sw.setAttribute('aria-checked','false');
+      disablePush(); toast('Reminders off'); return;
+    }
+    if(!('Notification' in window)){
+      toast(isIOS && !standalone ? 'Add this to your Home Screen first, then turn reminders on.' : 'Notifications are not supported in this browser.', 3800); return;
+    }
+    if(!live){ toast('Connect the calendar first, in the Sharing section above.', 3800); return; }
     Notification.requestPermission().then(function(perm){
       if(perm !== 'granted'){ toast('Notifications were not allowed.'); return; }
       prefs.reminders = true; saveJSON(PREF_KEY, prefs); sw.setAttribute('aria-checked','true');
-      notify('Reminders are on', 'You will hear about things 30 minutes before they start, while the app is open.');
-      checkReminders();
+      return enablePush().then(function(ok){
+        notify('Reminders are on', ok ? 'You will hear about things 30 minutes before they start.'
+                                      : 'This device will remind you while the app is open.');
+        toast(ok ? 'Reminders on for this device' : 'Reminders on while the app is open');
+        checkReminders();
+      });
     });
   });
 
   /* ── install: service worker for offline + Home Screen ── */
-  if('serviceWorker' in navigator && location.protocol === 'https:'){
+  if('serviceWorker' in navigator && window.isSecureContext){
     window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
   }
 
@@ -955,5 +1038,8 @@
   /* ── go ──────────────────────────────────────────────── */
   render();
   if(live) connect(); else setSync('local', 'THIS DEVICE ONLY');
+  if(prefs.reminders && 'Notification' in window && Notification.permission === 'granted'){
+    setTimeout(function(){ enablePush(); }, 3000);   // keep this device's subscription current
+  }
   setInterval(function(){ renderHero(); }, 60000);   // keep "next up" honest
 })();
