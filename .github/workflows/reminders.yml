@@ -1,0 +1,26 @@
+name: Send reminders
+
+# Runs on a schedule so reminders reach everyone's phone whether or not the
+# app is open. The window the sender looks at is wider than this interval, so a
+# late run still catches what is coming up.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: reminders
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install --no-save --no-fund --no-audit web-push@3
+      - run: node push/send.js
+        env:
+          VAPID_PRIVATE: ${{ secrets.VAPID_PRIVATE }}
